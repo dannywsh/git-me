@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 128 128" role="img" aria-labelledby="title">
+  <title id="title">Gitme</title>
+  <rect x="9" y="9" width="110" height="110" rx="26" fill="#17243D"/>
+  <path d="M45 75h7c18 0 31-13 31-31" fill="none" stroke="#67E6BE" stroke-width="8" stroke-linecap="round"/>
+  <path d="M45 37v54" fill="none" stroke="#F7F9FC" stroke-width="8" stroke-linecap="round"/>
+  <circle cx="45" cy="37" r="8" fill="#F7F9FC"/>
+  <circle cx="45" cy="91" r="8" fill="#F7F9FC"/>
+  <circle cx="83" cy="44" r="8" fill="#67E6BE"/>
+</svg>

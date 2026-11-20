@@ -1,0 +1,11 @@
+{
+  "name": "Gitme",
+  "slug": "git-me",
+  "identifier": "com.example.gitme",
+  "version": "0.1.0",
+  "out": "build",
+  "i18n": { "dir": "locales", "source": "en" },
+  "linux": { "comment": "A lightweight Git GUI." },
+  "ios": { "minimumSystemVersion": "17.0" },
+  "android": { "minSdk": 26 }
+}
