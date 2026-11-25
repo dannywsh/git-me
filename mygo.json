@@ -2,8 +2,12 @@
   "name": "Gitme",
   "slug": "git-me",
   "identifier": "com.example.gitme",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "out": "build",
+  "updates": {
+    "publicKey": "U+a+5XonvdBGTG8lU7t5+c6J1oKcApJ90Nu1Xsd8K4E=",
+    "github": "dannywsh/git-me"
+  },
   "i18n": { "dir": "locales", "source": "en" },
   "linux": { "comment": "A lightweight Git GUI." },
   "ios": { "minimumSystemVersion": "17.0" },

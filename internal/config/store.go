@@ -9,13 +9,14 @@ import (
 
 // Settings 保存应用的持久化状态，包括最近打开的仓库列表、当前打开的仓库标签页和界面偏好。
 type Settings struct {
-	RecentRepos  []string `json:"recent_repos"`
-	OpenTabs     []string `json:"open_tabs"`
-	ActiveTab    string   `json:"active_tab"`
-	SidebarWidth float32  `json:"sidebar_width"`
-	TreeMode     bool     `json:"tree_mode"`
-	UnifiedDiff  bool     `json:"unified_diff"`
-	AllChanges   bool     `json:"all_changes"`
+	RecentRepos          []string `json:"recent_repos"`
+	OpenTabs             []string `json:"open_tabs"`
+	ActiveTab            string   `json:"active_tab"`
+	SidebarWidth         float32  `json:"sidebar_width"`
+	TreeMode             bool     `json:"tree_mode"`
+	UnifiedDiff          bool     `json:"unified_diff"`
+	AllChanges           bool     `json:"all_changes"`
+	CheckUpdatesOnLaunch bool     `json:"check_updates_on_launch"`
 }
 
 // Store 负责读写本地磁盘上的 JSON 配置文件。
@@ -43,12 +44,13 @@ func NewStore(configDir string) *Store {
 // 无输入参数，返回默认初始化的 Settings 结构体。
 func DefaultSettings() Settings {
 	return Settings{
-		RecentRepos:  []string{},
-		OpenTabs:     []string{},
-		SidebarWidth: 310,
-		TreeMode:     false,
-		UnifiedDiff:  false,
-		AllChanges:   false,
+		RecentRepos:          []string{},
+		OpenTabs:             []string{},
+		SidebarWidth:         310,
+		TreeMode:             false,
+		UnifiedDiff:          false,
+		AllChanges:           false,
+		CheckUpdatesOnLaunch: true,
 	}
 }
 

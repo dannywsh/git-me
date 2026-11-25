@@ -1,3 +1,5 @@
 /build/
 /.mygo/
+/.agents/
+.DS_Store
 mygo_windows_*.syso

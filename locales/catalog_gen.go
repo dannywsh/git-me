@@ -36,3 +36,53 @@ type Messages struct{ locale string }
 // "zh-Hant", or of the catalog's language that suits it best, "" for the
 // source language.
 func In(locale string) Messages { return Messages{locale} }
+
+// CheckForUpdates says "Check for Updates…"
+// in the language the app shows.
+func CheckForUpdates() string { return In(i18n.Locale()).CheckForUpdates() }
+
+// CheckForUpdates says "Check for Updates…"
+// in the language of msgs.
+func (msgs Messages) CheckForUpdates() string {
+	return Catalog.Format(msgs.locale, "checkForUpdates", nil)
+}
+
+// UpdateSettings says "Update Settings"
+// in the language the app shows.
+func UpdateSettings() string { return In(i18n.Locale()).UpdateSettings() }
+
+// UpdateSettings says "Update Settings"
+// in the language of msgs.
+func (msgs Messages) UpdateSettings() string {
+	return Catalog.Format(msgs.locale, "updateSettings", nil)
+}
+
+// CheckAtStartup says "Check for Updates at Startup"
+// in the language the app shows.
+func CheckAtStartup() string { return In(i18n.Locale()).CheckAtStartup() }
+
+// CheckAtStartup says "Check for Updates at Startup"
+// in the language of msgs.
+func (msgs Messages) CheckAtStartup() string {
+	return Catalog.Format(msgs.locale, "checkAtStartup", nil)
+}
+
+// CheckAutomatically says "Check for Updates Automatically"
+// in the language the app shows.
+func CheckAutomatically() string { return In(i18n.Locale()).CheckAutomatically() }
+
+// CheckAutomatically says "Check for Updates Automatically"
+// in the language of msgs.
+func (msgs Messages) CheckAutomatically() string {
+	return Catalog.Format(msgs.locale, "checkAutomatically", nil)
+}
+
+// InstallUpdatesAutomatically says "Download and Install Updates Automatically"
+// in the language the app shows.
+func InstallUpdatesAutomatically() string { return In(i18n.Locale()).InstallUpdatesAutomatically() }
+
+// InstallUpdatesAutomatically says "Download and Install Updates Automatically"
+// in the language of msgs.
+func (msgs Messages) InstallUpdatesAutomatically() string {
+	return Catalog.Format(msgs.locale, "installUpdatesAutomatically", nil)
+}

@@ -28,6 +28,7 @@ type App struct {
 	GlobalError    string
 	uiMu           sync.Mutex
 	pendingUI      []func()
+	updates        *updateControls
 }
 
 // NewApp 创建并初始化 Gitme 顶层应用状态，自动恢复上次打开的仓库标签页或命令行传入的目录。
@@ -89,6 +90,8 @@ func (a *App) SetWindow(win *mygo.Window) {
 			}
 		})
 	})
+	a.startUpdateChecks(win)
+	a.installUpdateMenu(win)
 }
 
 // RunUI 将状态更新交给窗口主线程，窗口绑定前暂存至首次渲染或窗口绑定。

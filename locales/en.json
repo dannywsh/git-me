@@ -1,3 +1,8 @@
 {
-  "mygo.appDescription": "A lightweight Git GUI."
+  "mygo.appDescription": "A lightweight Git GUI.",
+  "checkForUpdates": "Check for Updates…",
+  "updateSettings": "Update Settings",
+  "checkAtStartup": "Check for Updates at Startup",
+  "checkAutomatically": "Check for Updates Automatically",
+  "installUpdatesAutomatically": "Download and Install Updates Automatically"
 }

@@ -1,3 +1,8 @@
 {
-  "mygo.appDescription": "輕量級 Git 圖形介面工具"
+  "mygo.appDescription": "輕量級 Git 圖形介面工具",
+  "checkForUpdates": "檢查更新…",
+  "updateSettings": "更新設定",
+  "checkAtStartup": "啟動時自動檢查更新",
+  "checkAutomatically": "自動檢查更新",
+  "installUpdatesAutomatically": "自動下載並安裝更新"
 }

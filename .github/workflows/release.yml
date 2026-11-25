@@ -62,7 +62,13 @@ jobs:
       - name: Build distribution packages
         env:
           TARGETS: ${{ matrix.targets }}
-        run: go tool mygo build -platform "$TARGETS"
+          MYGO_UPDATER_PRIVATE_KEY: ${{ secrets.MYGO_UPDATER_PRIVATE_KEY }}
+        run: |
+          if [[ -z "$MYGO_UPDATER_PRIVATE_KEY" ]]; then
+            echo "::error::MYGO_UPDATER_PRIVATE_KEY is required to sign release updates."
+            exit 1
+          fi
+          go tool mygo build -platform "$TARGETS"
       - name: Collect release packages
         shell: bash
         env:
@@ -70,6 +76,17 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           mkdir -p release-assets
+          copy_update() {
+            local target=$1
+            local dir="build/$target"
+            cp "$dir/update-$target.json" "$dir/git-me-$VERSION-$target.tar.gz" release-assets/
+            local delta
+            for delta in "$dir/"*"-$target.delta"; do
+              if [[ -f "$delta" ]]; then
+                cp "$delta" release-assets/
+              fi
+            done
+          }
           case "$PLATFORM" in
             macos)
               app=build/darwin-universal/Gitme.app
@@ -82,16 +99,19 @@ jobs:
               dmg="build/darwin-universal/git-me-$VERSION.dmg"
               hdiutil verify "$dmg"
               cp "$dmg" "release-assets/git-me-$VERSION-macos-universal.dmg"
+              copy_update darwin-universal
               ;;
             windows)
               for arch in amd64 arm64; do
                 cp "build/windows-$arch/git-me-setup-$VERSION-$arch.exe" release-assets/
+                copy_update "windows-$arch"
               done
               ;;
             linux)
               for arch in amd64 arm64; do
                 dir="build/linux-$arch"
-                cp "$dir/git-me-$VERSION-linux-$arch.tar.gz" "$dir/git-me_${VERSION}_$arch.deb" release-assets/
+                cp "$dir/git-me_${VERSION}_$arch.deb" release-assets/
+                copy_update "linux-$arch"
               done
               cp "build/linux-amd64/git-me-$VERSION-1.x86_64.rpm" \
                  "build/linux-arm64/git-me-$VERSION-1.aarch64.rpm" release-assets/
@@ -122,14 +142,23 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           shopt -s nullglob
-          packages=(git-me*)
-          if (( ${#packages[@]} != 9 )); then
-            echo "::error::Expected all nine release packages."
-            exit 1
-          fi
-          sha256sum "${packages[@]}" > SHA256SUMS
+          version="${GITHUB_REF_NAME#v}"
+          for target in darwin-universal windows-amd64 windows-arm64 linux-amd64 linux-arm64; do
+            for file in "update-$target.json" "git-me-$version-$target.tar.gz"; do
+              if [[ ! -s "$file" ]]; then
+                echo "::error::Missing update asset $file."
+                exit 1
+              fi
+            done
+          done
+          assets=(git-me* update-*.json)
+          sha256sum "${assets[@]}" > SHA256SUMS
 
           tag="$GITHUB_REF_NAME"
+          release_flags=()
+          if [[ "${version%%+*}" == *-* ]]; then
+            release_flags=(--prerelease --latest=false)
+          fi
           if draft=$(gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft); then
             if [[ "$draft" != true ]]; then
               echo "::error::Release $tag is already published."
@@ -148,5 +177,5 @@ jobs:
           NOTES
           fi
 
-          gh release upload "$tag" "${packages[@]}" SHA256SUMS --repo "$GITHUB_REPOSITORY" --clobber
-          gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --draft=false
+          gh release upload "$tag" "${assets[@]}" SHA256SUMS --repo "$GITHUB_REPOSITORY" --clobber
+          gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --draft=false "${release_flags[@]}"

@@ -1,3 +1,8 @@
 {
-  "mygo.appDescription": "軽量な Git GUI ツール"
+  "mygo.appDescription": "軽量な Git GUI ツール",
+  "checkForUpdates": "アップデートを確認…",
+  "updateSettings": "アップデート設定",
+  "checkAtStartup": "起動時にアップデートを確認",
+  "checkAutomatically": "アップデートを自動的に確認",
+  "installUpdatesAutomatically": "アップデートを自動的にダウンロードしてインストール"
 }
