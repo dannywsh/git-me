@@ -75,11 +75,14 @@ func (c *Client) Run(args ...string) (string, error) {
 // RunWithStdin 执行带标准输入内容的 git 子命令（如 git apply 从 stdin 读取 patch）。
 // 输入参数 stdinData 为注入到标准输入的字符串，args 为 git 参数；返回 stdout 字符串和错误。
 func (c *Client) RunWithStdin(stdinData string, args ...string) (string, error) {
+	return c.run(stdinData, append([]string{"-c", "core.quotepath=false", "--no-pager"}, args...), args)
+}
+
+// run 在仓库目录执行 fullArgs，stdinData 可为空，label 用于错误消息；返回原始 stdout 和错误。
+func (c *Client) run(stdinData string, fullArgs, label []string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	// 禁用 git 分页器与颜色转义码，保证解析稳定
-	fullArgs := append([]string{"-c", "core.quotepath=false", "--no-pager"}, args...)
 	cmd := exec.CommandContext(ctx, "git", fullArgs...)
 	cmd.Dir = c.repoPath
 	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "LC_ALL=C")
@@ -100,7 +103,7 @@ func (c *Client) RunWithStdin(stdinData string, args ...string) (string, error) 
 		if errMsg == "" {
 			errMsg = err.Error()
 		}
-		return "", fmt.Errorf("git %s 失败: %s", strings.Join(args, " "), errMsg)
+		return "", fmt.Errorf("git %s 失败: %s", strings.Join(label, " "), errMsg)
 	}
 	return stdout.String(), nil
 }

@@ -114,8 +114,43 @@ func TestGitClientAndHunkOperations(t *testing.T) {
 
 // TestAppNativeUIView 使用 MyGo 的无窗口 Tester 验证 Git-Me 主界面渲染与视图切换交互。
 func TestAppNativeUIView(t *testing.T) {
+	configDir := t.TempDir()
+	globalConfig := filepath.Join(configDir, "global.gitconfig")
+	systemConfig := filepath.Join(configDir, "system.gitconfig")
+	if err := os.WriteFile(globalConfig, []byte("[alias]\n  review = log --oneline\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(systemConfig, []byte("[init]\n  defaultBranch = main\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("GIT_CONFIG_GLOBAL", globalConfig)
+	t.Setenv("GIT_CONFIG_SYSTEM", systemConfig)
+	t.Setenv("GIT_CONFIG_NOSYSTEM", "0")
+	t.Setenv("GIT_CONFIG_COUNT", "0")
 	repoDir := initTempGitRepo(t)
-	application := app.NewApp([]string{repoDir})
+	client, err := git.NewClient(repoDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const remoteURL = "https://example.com/team/project.git"
+	for _, args := range [][]string{
+		{"remote", "add", "origin", "https://demo:fake-test-token@example.com/team/project.git?token=fake-test-token"},
+		{"config", "remote.origin.promisor", "true"},
+		{"config", "remote.origin.partialclonefilter", "blob:none"},
+		{"config", "http.extraHeader", "Authorization: Bearer fake-test-token"},
+		{"config", "sendemail.sample.smtpPass", "fixture-smtp-password"},
+		{"config", "imap.pass", "fixture-imap-password"},
+		{"config", "extensions.worktreeConfig", "true"},
+		{"config", "--worktree", "merge.conflictStyle", "diff3"},
+	} {
+		if _, err := client.Run(args...); err != nil {
+			t.Fatal(err)
+		}
+	}
+	application := &app.App{Settings: config.DefaultSettings(), Store: config.NewStore(t.TempDir())}
+	if err := application.OpenRepo(repoDir, true); err != nil {
+		t.Fatal(err)
+	}
 	defer func() {
 		for _, tab := range application.Tabs {
 			tab.Close()
@@ -123,18 +158,92 @@ func TestAppNativeUIView(t *testing.T) {
 	}()
 
 	tt := ui.NewTester(application.View, 1280, 800)
-	if !tt.HasText("+ 打开目录") {
-		t.Errorf("expected top bar '+ 打开目录' button, texts: %v", tt.Texts())
+	open, hasOpen := tt.AccessByRole(ui.RoleButton, "打开目录")
+	closeTab, hasClose := tt.AccessByRole(ui.RoleButton, "关闭此仓库标签页")
+	info, hasInfo := tt.AccessByRole(ui.RoleButton, "仓库详情")
+	if !hasOpen || !hasClose || !hasInfo || open.Bounds.X-closeTab.Bounds.X > 40 ||
+		open.Bounds.X <= closeTab.Bounds.X || info.Bounds.X < 1200 {
+		t.Fatalf("unexpected tab bar placement: add=%v close=%v info=%v", open.Bounds, closeTab.Bounds, info.Bounds)
 	}
 	if !tt.HasText("代码变更") || !tt.HasText("提交历史") || !tt.HasText("项目文件") {
 		t.Errorf("expected sidebar mode segmented controls, texts: %v", tt.Texts())
 	}
-
-	// 测试列出项目文件与全文代码搜索
-	client, err := git.NewClient(repoDir)
-	if err != nil {
+	waitForText := func(label string) {
+		t.Helper()
+		deadline := time.Now().Add(3 * time.Second)
+		for !tt.HasText(label) && time.Now().Before(deadline) {
+			tt.Frame()
+			time.Sleep(10 * time.Millisecond)
+		}
+		if !tt.HasText(label) {
+			t.Fatalf("missing %q: %v", label, tt.Texts())
+		}
+	}
+	waitForText(remoteURL)
+	tt.ClickAt(info.Bounds.X+info.Bounds.W/2, info.Bounds.Y+info.Bounds.H/2)
+	waitForText("本项目")
+	waitForText("远程与同步")
+	waitForText("remote.origin.url")
+	waitForText("差异与合并")
+	waitForText("merge.conflictstyle")
+	waitForText("网络与认证")
+	waitForText("http.extraheader")
+	waitForText("••••••")
+	waitForText("sendemail.sample.smtppass")
+	waitForText("imap.pass")
+	for _, credential := range []string{"fake-test-token", "fixture-smtp-password", "fixture-imap-password"} {
+		if tt.HasText(credential) {
+			t.Fatal("repository info exposed a credential fixture")
+		}
+	}
+	if local, ok := tt.AccessByRole(ui.RoleTab, "本项目"); !ok || !local.Selected ||
+		tt.HasText("alias.review") || tt.HasText("init.defaultbranch") {
+		t.Fatalf("repository config should be the default and show only local/worktree entries: %v", tt.Texts())
+	}
+	for _, check := range []struct {
+		tab, visible, hidden string
+	}{
+		{"全局", "alias.review", "remote.origin.url"},
+		{"其他来源", "init.defaultbranch", "alias.review"},
+		{"仓库概览", "Git 目录", "init.defaultbranch"},
+		{"全局", "命令与显示", "Git 目录"},
+	} {
+		if err := tt.Click(check.tab); err != nil {
+			t.Fatal(err)
+		}
+		waitForText(check.visible)
+		if tt.HasText(check.hidden) {
+			t.Fatalf("unexpected %q in %s: %v", check.hidden, check.tab, tt.Texts())
+		}
+	}
+	tt.Key(0, ui.KeyEscape)
+	tt.Advance(500 * time.Millisecond)
+	tt.ClickAt(info.Bounds.X+info.Bounds.W/2, info.Bounds.Y+info.Bounds.H/2)
+	waitForText("remote.origin.url")
+	tt.Key(0, ui.KeyEscape)
+	tt.Advance(500 * time.Millisecond)
+	if err := tt.Click("最近仓库"); err != nil {
 		t.Fatal(err)
 	}
+	remove, ok := tt.AccessByRole(ui.RoleButton, "从最近仓库移除 "+filepath.Base(repoDir))
+	if !ok {
+		t.Fatalf("missing recent remove action: %v", tt.Texts())
+	}
+	x, y := remove.Bounds.X+remove.Bounds.W/2, remove.Bounds.Y+remove.Bounds.H/2
+	beforeHover := tt.Image().RGBAAt(int(x), int(y))
+	tt.Move(x, y)
+	tt.Advance(200 * time.Millisecond)
+	if afterHover := tt.Image().RGBAAt(int(x), int(y)); afterHover == beforeHover {
+		t.Error("recent remove action did not change appearance on hover")
+	}
+	tt.ClickAt(x, y)
+	waitForText("暂无最近仓库")
+	saved, err := application.Store.Load()
+	if err != nil || len(saved.RecentRepos) != 0 || len(saved.OpenTabs) != 1 || application.ActiveTab() == nil {
+		t.Fatalf("removing history must keep the active tab open: %+v, %v", saved, err)
+	}
+
+	// 测试列出项目文件与全文代码搜索
 	files, err := client.ListProjectFiles(false)
 	if err != nil || len(files) < 2 {
 		t.Fatalf("expected at least 2 project files, got %v (err=%v)", files, err)

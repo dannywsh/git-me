@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 )
 
@@ -71,7 +72,34 @@ func (s *Store) Load() (Settings, error) {
 	if cfg.SidebarWidth < 200 {
 		cfg.SidebarWidth = 310
 	}
+	cfg.RecentRepos = slices.DeleteFunc(cfg.RecentRepos, isStaleUITestRepo)
+	cfg.OpenTabs = slices.DeleteFunc(cfg.OpenTabs, isStaleUITestRepo)
+	if isStaleUITestRepo(cfg.ActiveTab) {
+		cfg.ActiveTab = ""
+	}
 	return cfg, nil
+}
+
+var uiTestRepoPath = regexp.MustCompile(`^TestAppNativeUIView[0-9]+/[0-9]{3}$`)
+
+// isStaleUITestRepo 判断 path 是否是旧界面测试留下的已失效临时仓库路径。
+func isStaleUITestRepo(path string) bool {
+	if !filepath.IsAbs(path) {
+		return false
+	}
+	tempDir := os.TempDir()
+	resolved, _ := filepath.EvalSymlinks(tempDir)
+	for _, root := range []string{tempDir, resolved} {
+		if root == "" {
+			continue
+		}
+		relative, err := filepath.Rel(root, path)
+		if err == nil && uiTestRepoPath.MatchString(filepath.ToSlash(relative)) {
+			_, err = os.Stat(path)
+			return os.IsNotExist(err)
+		}
+	}
+	return false
 }
 
 // Save 将最新的配置项原子地写入磁盘 JSON 文件。
@@ -92,11 +120,17 @@ func (s *Store) Save(cfg Settings) error {
 // 输入参数 cfg 为配置指针，repoPath 为规范化后的仓库根路径。无返回值。
 func AddRecentRepo(cfg *Settings, repoPath string) {
 	cleaned := filepath.Clean(repoPath)
-	cfg.RecentRepos = slices.DeleteFunc(cfg.RecentRepos, func(p string) bool {
-		return filepath.Clean(p) == cleaned
-	})
+	RemoveRecentRepo(cfg, cleaned)
 	cfg.RecentRepos = append([]string{cleaned}, cfg.RecentRepos...)
 	if len(cfg.RecentRepos) > 15 {
 		cfg.RecentRepos = cfg.RecentRepos[:15]
 	}
+}
+
+// RemoveRecentRepo 从 cfg 删除与 repoPath 对应的历史项，无返回值。
+func RemoveRecentRepo(cfg *Settings, repoPath string) {
+	cleaned := filepath.Clean(repoPath)
+	cfg.RecentRepos = slices.DeleteFunc(cfg.RecentRepos, func(p string) bool {
+		return filepath.Clean(p) == cleaned
+	})
 }

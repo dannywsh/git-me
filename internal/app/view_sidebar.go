@@ -99,6 +99,7 @@ func (t *RepoTab) viewSidebar(c *ui.Context) {
 			case ModeProjectFiles:
 				t.viewProjectFilesPanel(c)
 			}
+			t.App.viewRecentRepoSection(c, t.Client.RepoPath())
 		})
 }
 

@@ -24,7 +24,7 @@ type App struct {
 	Win            *mygo.Window
 	Tabs           []*RepoTab
 	ActiveIndex    int
-	RecentMenuOpen bool
+	recentExpanded bool
 	GlobalError    string
 	uiMu           sync.Mutex
 	pendingUI      []func()
@@ -35,7 +35,7 @@ type App struct {
 // 输入参数 initialPaths 为命令行传入的初始目录路径列表；返回 *App 实例。
 func NewApp(initialPaths []string) *App {
 	store := config.NewStore("")
-	cfg, _ := store.Load()
+	cfg, loadErr := store.Load()
 
 	a := &App{
 		Store:       store,
@@ -54,7 +54,7 @@ func NewApp(initialPaths []string) *App {
 	// 3. 如果没有任何标签页，尝试打开当前工作目录（如果是 Git 仓库）
 	if len(a.Tabs) == 0 {
 		if cwd, err := os.Getwd(); err == nil {
-			_ = a.OpenRepo(cwd, true)
+			_ = a.OpenRepo(cwd, false)
 		}
 	}
 	// 4. 恢复上次激活的标签页索引
@@ -65,6 +65,9 @@ func NewApp(initialPaths []string) *App {
 				break
 			}
 		}
+	}
+	if loadErr == nil {
+		a.SaveSettings()
 	}
 	return a
 }
@@ -116,7 +119,7 @@ func (a *App) ActiveTab() *RepoTab {
 }
 
 // OpenRepo 验证并打开指定路径所属的 Git 仓库；若已打开则直接切换到该标签页。
-// 输入参数 dirPath 为文件夹或文件路径，activate 表示是否立即切换到该标签页；返回可能的错误。
+// dirPath 为文件夹或文件路径。activate 为真时切换标签并记入历史，为假时用于恢复会话；返回可能的错误。
 func (a *App) OpenRepo(dirPath string, activate bool) error {
 	client, err := git.NewClient(dirPath)
 	if err != nil {
@@ -130,6 +133,7 @@ func (a *App) OpenRepo(dirPath string, activate bool) error {
 		if existing.Client.RepoPath() == repoRoot {
 			if activate {
 				a.ActiveIndex = i
+				config.AddRecentRepo(&a.Settings, repoRoot)
 				a.SaveSettings()
 			}
 			return nil
@@ -141,8 +145,10 @@ func (a *App) OpenRepo(dirPath string, activate bool) error {
 	if activate || len(a.Tabs) == 1 {
 		a.ActiveIndex = len(a.Tabs) - 1
 	}
-	config.AddRecentRepo(&a.Settings, repoRoot)
-	a.SaveSettings()
+	if activate {
+		config.AddRecentRepo(&a.Settings, repoRoot)
+		a.SaveSettings()
+	}
 	return nil
 }
 
@@ -156,6 +162,8 @@ func (a *App) CloseTab(idx int) {
 	a.Tabs = slices.Delete(a.Tabs, idx, idx+1)
 	if len(a.Tabs) == 0 {
 		a.ActiveIndex = 0
+	} else if idx < a.ActiveIndex {
+		a.ActiveIndex--
 	} else if a.ActiveIndex >= len(a.Tabs) {
 		a.ActiveIndex = len(a.Tabs) - 1
 	}
@@ -165,9 +173,10 @@ func (a *App) CloseTab(idx int) {
 // PickRepoFolder 弹出系统原生文件夹选择对话框，供用户选择并打开一个 Git 仓库目录。
 // 无输入参数，无返回值。
 func (a *App) PickRepoFolder() {
+	win := a.Win
 	go func() {
 		paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{
-			Parent:    a.Win,
+			Parent:    win,
 			Title:     "选择 Git 仓库目录",
 			Directory: true,
 		})
@@ -183,8 +192,8 @@ func (a *App) PickRepoFolder() {
 }
 
 // SaveSettings 将当前打开的标签页列表、激活标签页和视图偏好持久化到磁盘。
-// 无输入参数，无返回值。
-func (a *App) SaveSettings() {
+// 无输入参数，返回保存错误。
+func (a *App) SaveSettings() error {
 	a.Settings.OpenTabs = a.Settings.OpenTabs[:0]
 	for _, tab := range a.Tabs {
 		a.Settings.OpenTabs = append(a.Settings.OpenTabs, tab.Client.RepoPath())
@@ -194,7 +203,19 @@ func (a *App) SaveSettings() {
 	} else {
 		a.Settings.ActiveTab = ""
 	}
-	_ = a.Store.Save(a.Settings)
+	return a.Store.Save(a.Settings)
+}
+
+// removeRecentRepo 移除 path 对应的历史记录，保存失败时恢复历史并显示错误。无返回值。
+func (a *App) removeRecentRepo(path string) {
+	previous := slices.Clone(a.Settings.RecentRepos)
+	config.RemoveRecentRepo(&a.Settings, path)
+	if err := a.SaveSettings(); err != nil {
+		a.Settings.RecentRepos = previous
+		a.GlobalError = "无法保存最近仓库：" + err.Error()
+		return
+	}
+	a.GlobalError = ""
 }
 
 // ApplyDiffLayoutToAllTabs 在用户切换“左右分栏 / 上下合并”时同步更新所有已加载的 DiffState。
@@ -277,6 +298,7 @@ func (a *App) View(c *ui.Context) {
 
 		// 5. 新建分支弹窗
 		curTab.viewNewBranchModal(c)
+		curTab.viewRepoInfoModal(c)
 	})
 }
 
@@ -299,36 +321,14 @@ func (a *App) viewEmptyWelcome(c *ui.Context) {
 			},
 		})
 
-		if a.GlobalError != "" {
-			ui.Text(c, a.GlobalError).FontSize(12).TextColor(tk.Error)
-		}
-
 		if len(a.Settings.RecentRepos) > 0 {
 			ui.Column(c).Width(460).Padding(12).Radius(8).Border(1, tk.BorderSecondary).Background(tk.BgLayout).Gap(6).Children(func() {
-				ui.Text(c, "最近打开的仓库").FontSize(12).Bold().TextColor(tk.TextSecondary)
-				for _, repoPath := range a.Settings.RecentRepos {
-					p := repoPath
-					row := ui.Row(c.Key("welcome-recent:"+p)).
-						Padding(6, 10).
-						Radius(6).
-						AlignItems(ui.Center).
-						Justify(ui.SpaceBetween).
-						Cursor(ui.CursorPointer)
-					if row.Hovered() {
-						row.Background(tk.FillTertiary)
-					}
-					if row.Clicked() {
-						_ = a.OpenRepo(p, true)
-					}
-					row.Children(func() {
-						ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
-							display.Icon(c, lucide.FolderGit2(), display.IconProps{Size: display.IconSmall}).TextColor(tk.TextSecondary)
-							ui.Text(c, filepath.Base(p)).FontSize(13).Bold()
-						})
-						ui.Text(c, p).FontSize(11).TextColor(tk.TextTertiary)
-					})
-				}
+				ui.Text(c, "最近仓库").FontSize(12).Bold().TextColor(tk.TextSecondary)
+				a.viewRecentRepos(c, "")
 			})
+		}
+		if a.GlobalError != "" {
+			ui.Text(c, a.GlobalError).FontSize(12).TextColor(tk.Error)
 		}
 	})
 }

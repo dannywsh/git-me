@@ -2,7 +2,6 @@ package app
 
 import (
 	"fmt"
-	"path/filepath"
 	"time"
 
 	"git-me/internal/git"
@@ -18,7 +17,7 @@ import (
 	"github.com/lobehub/lobe-mygo/pkg/theme"
 )
 
-// viewTopBar 渲染窗口最顶部的多仓库标签栏（Tabs）、打开目录按钮以及 Lobe 下拉最近仓库菜单。
+// viewTopBar 渲染仓库标签、紧邻标签的打开目录按钮和当前仓库的远程信息。
 // 输入参数 c 为 *ui.Context；无返回值。
 func (a *App) viewTopBar(c *ui.Context) {
 	tk := theme.TokensOf(c)
@@ -31,8 +30,7 @@ func (a *App) viewTopBar(c *ui.Context) {
 		BorderWidth(0, 0, 1, 0).
 		BorderColor(tk.BorderSecondary).
 		Children(func() {
-			// 1. 已打开的仓库标签页列表
-			ui.ScrollHorizontal(c).Grow(1).Children(func() {
+			ui.ScrollHorizontal(c).Shrink(1).MinWidth(0).Children(func() {
 				ui.Row(c).Gap(4).AlignItems(ui.Center).Children(func() {
 					for i, tab := range a.Tabs {
 						idx := i
@@ -55,69 +53,38 @@ func (a *App) viewTopBar(c *ui.Context) {
 							tabBox.Border(1, tk.BorderSecondary)
 						}
 
-						if tabBox.Clicked() {
+						tabBox.OnClick(func() {
 							a.ActiveIndex = idx
 							a.SaveSettings()
-						}
+						})
 
 						tabBox.Children(func() {
 							display.Icon(c, lucide.FolderGit2(), display.IconProps{Size: display.IconSmall}).TextColor(tk.TextSecondary)
-							ui.Text(c, repoName).FontSize(12).Bold()
+							ui.Text(c, repoName).MaxWidth(170).FontSize(12).Bold().SingleLine().Ellipsis("…")
 							changeCount := len(tab.StagedFiles) + len(tab.UnstagedFiles)
 							if changeCount > 0 {
 								ui.Badge(c, fmt.Sprintf("%d", changeCount))
 							}
-							if action.ActionIcon(c, lucide.X(), action.ActionIconProps{
+							action.ActionIcon(c, lucide.X(), action.ActionIconProps{
 								Variant:   action.ActionIconBorderless,
 								GlyphSize: 11,
 								BlockSize: 18,
 								Title:     "关闭此仓库标签页",
-							}).Clicked() {
-								a.CloseTab(idx)
-							}
+							}).OnClick(func() { a.CloseTab(idx) })
 						})
 					}
 				})
 			})
 
-			// 2. 打开新仓库文件夹按钮（紧凑尺寸）
-			if action.Button(c, "+ 打开目录", action.ButtonProps{
-				Variant: action.Default,
-				Size:    theme.Small,
-			}).Clicked() {
-				a.PickRepoFolder()
-			}
-
-			// 3. 最近打开的仓库 Lobe DropdownMenu
-			if len(a.Settings.RecentRepos) > 0 {
-				var items []overlay.MenuItem
-				curPath := ""
-				if cur := a.ActiveTab(); cur != nil {
-					curPath = cur.Client.RepoPath()
-				}
-				for _, rp := range a.Settings.RecentRepos {
-					icon := lucide.Folder()
-					if rp == curPath {
-						icon = lucide.Check()
-					}
-					items = append(items, overlay.MenuItem{
-						Key:   rp,
-						Label: filepath.Base(rp),
-						Extra: rp,
-						Icon:  icon,
-					})
-				}
-				chosen := overlay.DropdownMenu(c, &a.RecentMenuOpen, overlay.DropdownMenuProps{
-					Items: items,
-				}, func(trig ui.Element) {
-					action.StyleButton(c, trig, "最近仓库 ▾", action.ButtonProps{
-						Variant: action.Default,
-						Size:    theme.Small,
-					})
-				})
-				if chosen != "" {
-					_ = a.OpenRepo(chosen, true)
-				}
+			action.ActionIcon(c.Key("open-repo"), lucide.Plus(), action.ActionIconProps{
+				Variant:   action.ActionIconBorderless,
+				GlyphSize: 15,
+				BlockSize: 26,
+				Title:     "打开目录",
+			}).Radius(13).OnClick(a.PickRepoFolder)
+			ui.Spacer(c)
+			if tab := a.ActiveTab(); tab != nil {
+				tab.viewRemoteSummary(c)
 			}
 		})
 }

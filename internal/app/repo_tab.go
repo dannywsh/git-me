@@ -62,16 +62,20 @@ type RepoTab struct {
 	lastRefreshAt    time.Time
 
 	// 顶栏分支与同步状态
-	BranchInfo     git.BranchInfo
-	SelectedBranch string
-	BranchMenuOpen bool
-	RecentMenuOpen bool
-	NewBranchModal bool
-	NewBranchName  string
-	BranchErrMsg   string
-	Busy           bool
-	StatusBanner   string
-	IsBannerError  bool
+	BranchInfo      git.BranchInfo
+	SelectedBranch  string
+	BranchMenuOpen  bool
+	remoteSummary   string
+	repoInfoOpen    bool
+	repoInfoLoading bool
+	repoInfo        git.RepositoryInfo
+	repoInfoSection int
+	NewBranchModal  bool
+	NewBranchName   string
+	BranchErrMsg    string
+	Busy            bool
+	StatusBanner    string
+	IsBannerError   bool
 
 	// 左侧栏通用状态
 	SidebarMode      int // 0: 代码变更, 1: 提交历史, 2: 项目文件
@@ -509,6 +513,12 @@ func (t *RepoTab) refreshDetails(seq uint64, status git.StatusResult, includeIgn
 	if t.refreshSeq.Load() != seq {
 		return
 	}
+	remotes, remoteErr := t.Client.Remotes()
+	t.App.RunUI(func() {
+		if t.refreshSeq.Load() == seq {
+			t.remoteSummary = remoteSummaryLabel(remotes, remoteErr)
+		}
+	})
 	commits, _ := t.Client.RecentCommits(50)
 	if t.refreshSeq.Load() != seq {
 		return
