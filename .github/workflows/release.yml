@@ -73,7 +73,11 @@ jobs:
           case "$PLATFORM" in
             macos)
               app=build/darwin-universal/Gitme.app
-              lipo -verify_arch arm64 x86_64 "$app/Contents/MacOS/Gitme"
+              architectures=" $(lipo -archs "$app/Contents/MacOS/Gitme") "
+              if [[ "$architectures" != *' arm64 '* || "$architectures" != *' x86_64 '* ]]; then
+                echo "::error::Gitme.app must contain both arm64 and x86_64."
+                exit 1
+              fi
               codesign --verify --deep --strict "$app"
               dmg="build/darwin-universal/git-me-$VERSION.dmg"
               hdiutil verify "$dmg"
