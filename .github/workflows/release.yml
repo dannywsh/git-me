@@ -1,0 +1,148 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+
+env:
+  CGO_ENABLED: '0'
+
+jobs:
+  build:
+    name: Build ${{ matrix.platform }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos
+            runner: macos-15
+            targets: darwin/universal
+          - platform: windows
+            runner: ubuntu-24.04
+            targets: windows/amd64,windows/arm64
+          - platform: linux
+            runner: ubuntu-24.04
+            targets: linux/amd64,linux/arm64
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check the tag against the application version
+        id: version
+        shell: bash
+        run: |
+          version=$(jq -er '.version' mygo.json)
+          if [[ "$GITHUB_REF_NAME" != "v$version" ]]; then
+            echo "::error::The tag must match mygo.json version v$version."
+            exit 1
+          fi
+          printf 'version=%s\n' "$version" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      - name: Test
+        if: matrix.platform == 'macos'
+        run: |
+          go test ./...
+          go tool mygo vet .
+      - name: Install NSIS
+        if: matrix.platform == 'windows'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y nsis
+      - name: Build distribution packages
+        env:
+          TARGETS: ${{ matrix.targets }}
+        run: go tool mygo build -platform "$TARGETS"
+      - name: Collect release packages
+        shell: bash
+        env:
+          PLATFORM: ${{ matrix.platform }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          mkdir -p release-assets
+          case "$PLATFORM" in
+            macos)
+              app=build/darwin-universal/Gitme.app
+              lipo -verify_arch arm64 x86_64 "$app/Contents/MacOS/Gitme"
+              codesign --verify --deep --strict "$app"
+              dmg="build/darwin-universal/git-me-$VERSION.dmg"
+              hdiutil verify "$dmg"
+              cp "$dmg" "release-assets/git-me-$VERSION-macos-universal.dmg"
+              ;;
+            windows)
+              for arch in amd64 arm64; do
+                cp "build/windows-$arch/git-me-setup-$VERSION-$arch.exe" release-assets/
+              done
+              ;;
+            linux)
+              for arch in amd64 arm64; do
+                dir="build/linux-$arch"
+                cp "$dir/git-me-$VERSION-linux-$arch.tar.gz" "$dir/git-me_${VERSION}_$arch.deb" release-assets/
+              done
+              cp "build/linux-amd64/git-me-$VERSION-1.x86_64.rpm" \
+                 "build/linux-arm64/git-me-$VERSION-1.aarch64.rpm" release-assets/
+              ;;
+          esac
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-${{ matrix.platform }}
+          path: release-assets/
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub Release
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: release-*
+          path: release-assets
+          merge-multiple: true
+      - name: Upload packages and publish
+        working-directory: release-assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          shopt -s nullglob
+          packages=(git-me*)
+          if (( ${#packages[@]} != 9 )); then
+            echo "::error::Expected all nine release packages."
+            exit 1
+          fi
+          sha256sum "${packages[@]}" > SHA256SUMS
+
+          tag="$GITHUB_REF_NAME"
+          if draft=$(gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft); then
+            if [[ "$draft" != true ]]; then
+              echo "::error::Release $tag is already published."
+              exit 1
+            fi
+          else
+            gh release create "$tag" --repo "$GITHUB_REPOSITORY" --verify-tag --draft \
+              --title "Gitme ${tag#v}" --notes-file - <<'NOTES'
+          ## 下载
+
+          - **macOS**：下载通用 DMG，打开后将 Gitme 拖进「应用程序」。支持 Apple 芯片和 Intel Mac。
+          - **Windows**：按架构选择 x64（amd64）或 ARM64 的 EXE 安装包。
+          - **Linux**：按发行版和架构选择 DEB、RPM 或 TAR.GZ，支持 x64 和 ARM64。
+
+          运行 Gitme 前请安装 Git。
+          NOTES
+          fi
+
+          gh release upload "$tag" "${packages[@]}" SHA256SUMS --repo "$GITHUB_REPOSITORY" --clobber
+          gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --draft=false

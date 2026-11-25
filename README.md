@@ -40,6 +40,14 @@ go tool mygo build
 
 构建产物位于各平台对应的 `build/` 子目录。例如，Apple 芯片 Mac 的应用包为 `build/darwin-arm64/Gitme.app`。
 
+## 安装
+
+从 [GitHub Releases](https://github.com/dannywsh/git-me/releases/latest) 下载适合当前系统的安装包。运行 Gitme 前请先安装 Git。
+
+- **macOS**。下载通用 DMG，打开后将 Gitme 拖进「应用程序」。支持 Apple 芯片和 Intel Mac。
+- **Windows**。按系统架构选择 x64 或 ARM64 安装包。
+- **Linux**。按发行版和系统架构选择 DEB、RPM 或 TAR.GZ。
+
 ## 项目结构
 
 | 路径 | 用途 |
