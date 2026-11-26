@@ -33,8 +33,15 @@ func (c *Client) Remotes() ([]RemoteAddress, error) {
 	if err != nil {
 		return nil, err
 	}
+	return parseRemotesOutput(raw), nil
+}
+
+// parseRemotesOutput 解析 git remote -v 的输出文本，提取并隐藏 Fetch 和 Push 远程地址中的凭据信息。
+// 输入参数 raw 为 git remote -v 的原始标准输出，返回解析后的 RemoteAddress 切片。
+func parseRemotesOutput(raw string) []RemoteAddress {
 	var remotes []RemoteAddress
 	for line := range strings.SplitSeq(raw, "\n") {
+		line = strings.TrimRight(line, "\r")
 		name, details, ok := strings.Cut(line, "\t")
 		if !ok {
 			continue
@@ -53,7 +60,7 @@ func (c *Client) Remotes() ([]RemoteAddress, error) {
 			}
 		}
 	}
-	return remotes, nil
+	return remotes
 }
 
 // RepositoryInfo 读取当前工作区的详细 Git 信息。无输入参数，返回仓库快照。

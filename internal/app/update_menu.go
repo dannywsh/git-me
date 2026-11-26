@@ -12,14 +12,12 @@ import (
 const (
 	checkAtStartupID = "updates.automatic-checks"
 	autoInstallID    = "updates.automatic-install"
+	settingsMenuID   = "app.settings"
 )
 
-// installUpdateMenu 将更新命令安装到 win 对应的原生菜单，并在用户修改更新偏好或语言时同步菜单。
+// installUpdateMenu 将应用设置与更新命令安装到 win 对应的原生菜单，并在用户修改更新偏好或语言时同步菜单。
 // 输入参数 win 为主窗口，无返回值。
 func (a *App) installUpdateMenu(win *mygo.Window) {
-	if a.updates == nil {
-		return
-	}
 	var menu *mygo.Menu
 	install := func(locale string) {
 		menu = a.updateMenu(runtime.GOOS, locale)
@@ -31,7 +29,7 @@ func (a *App) installUpdateMenu(win *mygo.Window) {
 	}
 	install(mygo.App.Locale())
 	win.OnClosed(mygo.App.OnLocaleChanged(install))
-	if a.updates.selfInstall {
+	if a.updates != nil && a.updates.selfInstall {
 		win.OnClosed(updater.OnChange(func() {
 			startup := menu.ItemByID(checkAtStartupID)
 			autoInstall := menu.ItemByID(autoInstallID)
@@ -49,38 +47,80 @@ func (a *App) installUpdateMenu(win *mygo.Window) {
 	}
 }
 
-// updateMenu 按 goos 和 locale 构建原生菜单，返回包含检查命令和更新偏好的菜单。
+// updateMenu 按 goos 和 locale 构建系统原生菜单，包含设置入口及更新命令。
+// 输入参数 goos 为目标操作系统，locale 为界面语言标识；返回构建好的 *mygo.Menu。
 func (a *App) updateMenu(goos, locale string) *mygo.Menu {
 	msg := locales.In(locale)
-	check := &mygo.MenuItem{
-		Label: msg.CheckForUpdates(),
+	settings := &mygo.MenuItem{
+		ID:          settingsMenuID,
+		Label:       msg.Settings(),
+		Accelerator: "CmdOrCtrl+,",
 		Click: func(*mygo.MenuItem, *mygo.Window) {
-			if a.updates.selfInstall {
-				updater.CheckForUpdates()
-			} else {
-				a.updates.checkRelease(true)
-			}
+			a.openSettingsWindow()
 		},
 	}
-	preferences := &mygo.MenuItem{Label: msg.UpdateSettings(), Submenu: a.updatePreferences(msg)}
-	if goos != "darwin" {
-		return mygo.NewMenu([]*mygo.MenuItem{{Role: mygo.RoleHelp, Submenu: []*mygo.MenuItem{check, preferences}}})
+
+	var check, preferences *mygo.MenuItem
+	if a.updates != nil {
+		check = &mygo.MenuItem{
+			Label: msg.CheckForUpdates(),
+			Click: func(*mygo.MenuItem, *mygo.Window) {
+				if a.updates.selfInstall {
+					updater.CheckForUpdates()
+				} else {
+					a.updates.checkRelease(true)
+				}
+			},
+		}
+		preferences = &mygo.MenuItem{Label: msg.UpdateSettings(), Submenu: a.updatePreferences(msg)}
 	}
+
+	if goos != "darwin" {
+		openFolder := &mygo.MenuItem{
+			Label:       msg.OpenFolder(),
+			Accelerator: "CmdOrCtrl+O",
+			Click: func(*mygo.MenuItem, *mygo.Window) {
+				a.PickRepoFolder()
+			},
+		}
+		items := []*mygo.MenuItem{
+			{Role: mygo.RoleFileMenu, Submenu: []*mygo.MenuItem{
+				openFolder,
+				mygo.Separator(),
+				settings,
+				mygo.Separator(),
+				{Role: mygo.RoleQuit},
+			}},
+		}
+		if check != nil {
+			items = append(items, &mygo.MenuItem{
+				Label:   msg.HelpMenu(),
+				Submenu: []*mygo.MenuItem{check, preferences},
+			})
+		}
+		return mygo.NewMenu(items)
+	}
+
+	appItems := []*mygo.MenuItem{
+		{Role: mygo.RoleAbout},
+		mygo.Separator(),
+		settings,
+		mygo.Separator(),
+	}
+	if check != nil {
+		appItems = append(appItems, check, preferences, mygo.Separator())
+	}
+	appItems = append(appItems,
+		&mygo.MenuItem{Role: mygo.RoleServices},
+		mygo.Separator(),
+		&mygo.MenuItem{Role: mygo.RoleHide},
+		&mygo.MenuItem{Role: mygo.RoleHideOthers},
+		&mygo.MenuItem{Role: mygo.RoleUnhide},
+		mygo.Separator(),
+		&mygo.MenuItem{Role: mygo.RoleQuit},
+	)
 	return mygo.NewMenu([]*mygo.MenuItem{
-		{Role: mygo.RoleAppMenu, Submenu: []*mygo.MenuItem{
-			{Role: mygo.RoleAbout},
-			mygo.Separator(),
-			check,
-			preferences,
-			mygo.Separator(),
-			{Role: mygo.RoleServices},
-			mygo.Separator(),
-			{Role: mygo.RoleHide},
-			{Role: mygo.RoleHideOthers},
-			{Role: mygo.RoleUnhide},
-			mygo.Separator(),
-			{Role: mygo.RoleQuit},
-		}},
+		{Role: mygo.RoleAppMenu, Submenu: appItems},
 		{Role: mygo.RoleFileMenu},
 		{Role: mygo.RoleEditMenu},
 		{Role: mygo.RoleViewMenu},

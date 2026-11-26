@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
@@ -29,6 +30,8 @@ type App struct {
 	uiMu           sync.Mutex
 	pendingUI      []func()
 	updates        *updateControls
+	settingsWin    *mygo.Window
+	settingsState  settingsState
 }
 
 // NewApp 创建并初始化 Gitme 顶层应用状态，自动恢复上次打开的仓库标签页或命令行传入的目录。
@@ -36,6 +39,7 @@ type App struct {
 func NewApp(initialPaths []string) *App {
 	store := config.NewStore("")
 	cfg, loadErr := store.Load()
+	git.SetGitPath(cfg.GitPath)
 
 	a := &App{
 		Store:       store,
@@ -123,7 +127,9 @@ func (a *App) ActiveTab() *RepoTab {
 func (a *App) OpenRepo(dirPath string, activate bool) error {
 	client, err := git.NewClient(dirPath)
 	if err != nil {
-		a.GlobalError = err.Error()
+		if activate || errors.Is(err, git.ErrGitNotFound) {
+			a.GlobalError = err.Error()
+		}
 		return err
 	}
 	a.GlobalError = ""
@@ -229,9 +235,9 @@ func (a *App) ApplyDiffLayoutToAllTabs() {
 	a.SaveSettings()
 }
 
-// View 是提供给 MyGo 窗口渲染的顶层视图入口函数，启用 Lobe UI 主题 Tokens。
-// 输入参数 c 为窗口的 *ui.Context；无返回值。
-func (a *App) View(c *ui.Context) {
+// flushPendingUI 在视图构建开始时清空并执行所有待处理的 UI 主线程回调。
+// 无输入参数，无返回值。
+func (a *App) flushPendingUI() {
 	a.uiMu.Lock()
 	pending := a.pendingUI
 	a.pendingUI = nil
@@ -239,11 +245,18 @@ func (a *App) View(c *ui.Context) {
 	for _, fn := range pending {
 		fn()
 	}
+}
+
+// View 是提供给 MyGo 窗口渲染的顶层视图入口函数，启用 Lobe UI 主题 Tokens。
+// 输入参数 c 为窗口的 *ui.Context；无返回值。
+func (a *App) View(c *ui.Context) {
+	a.flushPendingUI()
 	theme.Apply(c)
 	tk := theme.TokensOf(c)
 
-	// 全局窗口快捷键：Cmd+O 打开仓库，Cmd+R 刷新当前仓库，Cmd+S 保存当前微调文件
+	// 全局窗口快捷键：Cmd+O 打开仓库，Cmd+R 刷新当前仓库，Cmd+S 保存当前微调文件，Cmd+, 打开设置
 	c.OnWindowShortcut(ui.Cmd, 'o', a.PickRepoFolder)
+	c.OnWindowShortcut(ui.Cmd, ',', a.openSettingsWindow)
 	c.OnWindowShortcut(ui.Cmd, 'r', func() {
 		if tab := a.ActiveTab(); tab != nil {
 			tab.refreshManually()
@@ -296,7 +309,7 @@ func (a *App) View(c *ui.Context) {
 		// 4. 底部状态栏
 		curTab.viewStatusBar(c)
 
-		// 5. 新建分支弹窗
+		// 5. 新建分支与仓库详情弹窗
 		curTab.viewNewBranchModal(c)
 		curTab.viewRepoInfoModal(c)
 	})

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strings"
 )
 
 // Settings 保存应用的持久化状态，包括最近打开的仓库列表、当前打开的仓库标签页和界面偏好。
@@ -18,6 +19,7 @@ type Settings struct {
 	UnifiedDiff          bool     `json:"unified_diff"`
 	AllChanges           bool     `json:"all_changes"`
 	CheckUpdatesOnLaunch bool     `json:"check_updates_on_launch"`
+	GitPath              string   `json:"git_path,omitempty"`
 }
 
 // Store 负责读写本地磁盘上的 JSON 配置文件。
@@ -69,6 +71,7 @@ func (s *Store) Load() (Settings, error) {
 	if err := json.Unmarshal(data, &cfg); err != nil {
 		return DefaultSettings(), err
 	}
+	cfg.GitPath = strings.TrimSpace(cfg.GitPath)
 	if cfg.SidebarWidth < 200 {
 		cfg.SidebarWidth = 310
 	}

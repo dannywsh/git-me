@@ -37,6 +37,36 @@ type Messages struct{ locale string }
 // source language.
 func In(locale string) Messages { return Messages{locale} }
 
+// Settings says "Settings…"
+// in the language the app shows.
+func Settings() string { return In(i18n.Locale()).Settings() }
+
+// Settings says "Settings…"
+// in the language of msgs.
+func (msgs Messages) Settings() string {
+	return Catalog.Format(msgs.locale, "settings", nil)
+}
+
+// OpenFolder says "Open Folder…"
+// in the language the app shows.
+func OpenFolder() string { return In(i18n.Locale()).OpenFolder() }
+
+// OpenFolder says "Open Folder…"
+// in the language of msgs.
+func (msgs Messages) OpenFolder() string {
+	return Catalog.Format(msgs.locale, "openFolder", nil)
+}
+
+// HelpMenu says "Help"
+// in the language the app shows.
+func HelpMenu() string { return In(i18n.Locale()).HelpMenu() }
+
+// HelpMenu says "Help"
+// in the language of msgs.
+func (msgs Messages) HelpMenu() string {
+	return Catalog.Format(msgs.locale, "helpMenu", nil)
+}
+
 // CheckForUpdates says "Check for Updates…"
 // in the language the app shows.
 func CheckForUpdates() string { return In(i18n.Locale()).CheckForUpdates() }

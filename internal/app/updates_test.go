@@ -67,26 +67,42 @@ func TestUpdateMenuPersistsStartupPreference(t *testing.T) {
 	}
 }
 
-// TestUpdateMenuPlacement 验证 macOS 应用菜单和 Windows 帮助菜单包含本地化的检查命令。
+// TestUpdateMenuPlacement 验证系统原生菜单栏在 macOS、Windows 和 Linux 下包含本地化的设置入口与检查更新命令。
 // t 为当前测试，无返回值。
 func TestUpdateMenuPlacement(t *testing.T) {
 	a := &App{Settings: config.DefaultSettings(), updates: &updateControls{}}
 	for _, tc := range []struct {
-		goos, locale, label string
-		role                mygo.MenuRole
-		index               int
+		goos, locale, settingsLabel, checkLabel, helpLabel string
 	}{
-		{"darwin", "zh-Hans", "检查更新…", mygo.RoleAppMenu, 2},
-		{"windows", "en", "Check for Updates…", mygo.RoleHelp, 0},
-		{"linux", "zh-Hant", "檢查更新…", mygo.RoleHelp, 0},
+		{"darwin", "zh-Hans", "设置…", "检查更新…", ""},
+		{"windows", "en", "Settings…", "Check for Updates…", "Help"},
+		{"linux", "zh-Hant", "設定…", "檢查更新…", "說明"},
 	} {
 		t.Run(tc.goos, func(t *testing.T) {
-			menu := a.updateMenu(tc.goos, tc.locale).Items()[0]
-			if menu.Role != tc.role || len(menu.Submenu) <= tc.index {
-				t.Fatalf("unexpected menu: %+v", menu)
+			menu := a.updateMenu(tc.goos, tc.locale)
+			settings := menu.ItemByID(settingsMenuID)
+			if settings == nil || settings.Label != tc.settingsLabel || settings.Accelerator != "CmdOrCtrl+," || settings.Click == nil || !settings.IsVisible() {
+				t.Fatalf("unexpected settings item: %+v", settings)
 			}
-			check := menu.Submenu[tc.index]
-			if check.Label != tc.label || check.Click == nil {
+
+			items := menu.Items()
+			if tc.goos == "darwin" {
+				appMenu := items[0]
+				if appMenu.Role != mygo.RoleAppMenu || len(appMenu.Submenu) <= 4 {
+					t.Fatalf("unexpected macOS app menu: %+v", appMenu)
+				}
+				check := appMenu.Submenu[4]
+				if check.Label != tc.checkLabel || check.Click == nil {
+					t.Fatalf("unexpected update action: %+v", check)
+				}
+				return
+			}
+
+			if len(items) != 2 || items[0].Role != mygo.RoleFileMenu || items[1].Label != tc.helpLabel || !items[1].IsVisible() {
+				t.Fatalf("unexpected %s top menus: %+v", tc.goos, items)
+			}
+			check := items[1].Submenu[0]
+			if check.Label != tc.checkLabel || check.Click == nil {
 				t.Fatalf("unexpected update action: %+v", check)
 			}
 		})

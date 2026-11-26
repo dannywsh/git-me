@@ -1,5 +1,8 @@
 {
   "mygo.appDescription": "A lightweight Git GUI.",
+  "settings": "Settings…",
+  "openFolder": "Open Folder…",
+  "helpMenu": "Help",
   "checkForUpdates": "Check for Updates…",
   "updateSettings": "Update Settings",
   "checkAtStartup": "Check for Updates at Startup",

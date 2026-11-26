@@ -2,7 +2,7 @@
   "name": "Gitme",
   "slug": "git-me",
   "identifier": "com.example.gitme",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "out": "build",
   "updates": {
     "publicKey": "U+a+5XonvdBGTG8lU7t5+c6J1oKcApJ90Nu1Xsd8K4E=",

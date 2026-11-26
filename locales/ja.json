@@ -1,5 +1,8 @@
 {
   "mygo.appDescription": "軽量な Git GUI ツール",
+  "settings": "設定…",
+  "openFolder": "フォルダを開く…",
+  "helpMenu": "ヘルプ",
   "checkForUpdates": "アップデートを確認…",
   "updateSettings": "アップデート設定",
   "checkAtStartup": "起動時にアップデートを確認",

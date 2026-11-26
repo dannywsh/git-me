@@ -1,5 +1,8 @@
 {
   "mygo.appDescription": "輕量級 Git 圖形介面工具",
+  "settings": "設定…",
+  "openFolder": "打開資料夾…",
+  "helpMenu": "說明",
   "checkForUpdates": "檢查更新…",
   "updateSettings": "更新設定",
   "checkAtStartup": "啟動時自動檢查更新",

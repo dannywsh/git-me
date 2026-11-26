@@ -32,3 +32,33 @@ func TestLoadRemovesStaleUITestRepos(t *testing.T) {
 		t.Fatalf("unexpected retained paths: %+v", got)
 	}
 }
+
+// TestSaveAndLoadGitPath 验证自定义 Git 可执行文件路径的保存、读取去空白以及空值重置持久化。
+func TestSaveAndLoadGitPath(t *testing.T) {
+	store := NewStore(t.TempDir())
+	cfg := DefaultSettings()
+	cfg.GitPath = "  /custom/bin/git  "
+	if err := store.Save(cfg); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := store.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.GitPath != "/custom/bin/git" {
+		t.Fatalf("got GitPath = %q, want %q", got.GitPath, "/custom/bin/git")
+	}
+
+	got.GitPath = ""
+	if err := store.Save(got); err != nil {
+		t.Fatal(err)
+	}
+	reloaded, err := store.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reloaded.GitPath != "" {
+		t.Fatalf("expected empty GitPath after reset, got %q", reloaded.GitPath)
+	}
+}
